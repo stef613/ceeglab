@@ -1,0 +1,114 @@
+---
+title: "STACKS_code"
+output: pdf_document
+date: "2025-12-21"
+---
+
+```{r}
+fastp_summary <- read.csv("fastp_summary.csv")
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+```
+
+```{r}
+data <- fastp_summary %>%
+  mutate(sample = sub("\\..*", "", sample)) %>%
+  mutate(reads = reads / 1000) %>%
+  filter(substr(sample, 1, 1) == "s")
+
+data$state <- factor(data$state, levels = c("before", "after"))
+
+ggplot(data, aes(fill=state, y=reads, x=sample)) + 
+    geom_bar(position="dodge", stat="identity") +
+    ylab("reads (in thousands)") +
+    ggtitle("fastp results for sexpunctata") +
+      theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+data <- fastp_summary %>%
+  mutate(sample = sub("\\..*", "", sample)) %>%
+  mutate(reads = reads / 1000) %>%
+  filter(substr(sample, 1, 1) == "g")
+
+data$state <- factor(data$state, levels = c("before", "after"))
+
+ggplot(data, aes(fill=state, y=reads, x=sample)) + 
+    geom_bar(position="dodge", stat="identity") +
+    ylab("reads (in thousands)") +
+    ggtitle("fastp results for guttata") +
+      theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+```{r}
+data <- fastp_summary %>%
+  mutate(sample = sub("\\..*", "", sample)) %>%
+  filter(state == "after") %>%
+  mutate(species = ifelse(substr(sample, 1, 1) == "s", "sexpunctata", "guttata")) %>%
+  mutate(pX = regmatches(sample, regexpr("p\\d+", sample))) %>%
+  mutate(population = returnPopulation((pX)))
+```
+
+```{r}
+returnPopulation <- function(pX){
+  sapply(pX, function(v){
+    if(v %in% c("p1", "p5", "p19", "p23", "p29", "p30", "p31", "p32", "p33")){
+      "aa"
+    }
+    else if(v %in% c("p7", "p17", "p28", "p34")){
+      "fp"
+    }
+    else if(v %in% c("p21")){
+      "wm"
+    }
+    else if(v %in% c("p24")){
+      "mv"
+    }
+    else if(v %in% c("p11", "p26")){
+      "ln"
+    }
+    else if(v %in% c("p13", "p15", "p27")){
+      "cp"
+    }
+    else if(v %in% c("p12", "p14")){
+      "ls"
+    }
+    else if(v %in% c("p6", "p16")){
+      "wb"
+    }
+    else if(v %in% c("p18")){
+      "lw"
+    }
+  })
+}
+```
+
+```{r}
+species <- c("guttata", "sexpunctata")
+populations <- c("aa", "fp", "wm", "mv", "ln", "cp", "ls", "wb", "lw")
+
+for(spec in species){
+  for(pop in populations){
+    graphableData <- data %>% filter(species == spec) %>%
+      filter(population == pop)
+    
+    g <- ggplot(graphableData, aes(x = reads)) +
+      geom_histogram() +
+      scale_x_log10(limits = c(1, 1e8), breaks = 10^(0:8)) +
+      ggtitle(paste(spec, pop))
+    print(g)
+  }
+}
+```
+
+```{r}
+sumstats <- read.table("populations.sumstats_summary.txt", header=TRUE)
+```
+
+```{r}
+library(dplyr)
+test2 <- test |> mutate(id = sub("^[^-]+-[^-]+-(.*)$", "\\1", name))
+
+```

@@ -1,0 +1,216 @@
+---
+title: "PCA"
+output: pdf_document
+date: "2026-06-19"
+---
+
+```{r}
+library(vcfR)
+```
+
+```{r}
+snps <- vcfR::read.vcfR(
+  "C:/Users/slind/OneDrive/Desktop/Strickland Lab/honors thesis code/guttata300_r0.5.snps.vcf",
+  convertNA = TRUE
+)
+```
+
+```{r}
+# Check if as.numeric = TRUE is safe for the data
+gt_char <- vcfR::extract.gt(
+  snps,
+  element = "GT",
+  IDtoRowNames = FALSE,
+  as.numeric = FALSE,
+  convertNA = TRUE,
+  return.alleles = FALSE
+)
+
+gt_num <- vcfR::extract.gt(
+  snps,
+  element = "GT",
+  IDtoRowNames = FALSE,
+  as.numeric = TRUE,
+  convertNA = TRUE,
+  return.alleles = FALSE
+)
+
+table(as.vector(gt_char), useNA = "ifany")
+table(as.vector(gt_num), useNA = "ifany")
+summary(as.vector(gt_num))
+```
+
+```{r}
+# Convert genotypes 
+# 0/0 = 0, 0/1 = 1, 1/1 = 2
+
+gt_dosage <- apply(gt_char, 2, function(x) {
+  dplyr::case_when(
+    x %in% c("0/0", "0|0") ~ 0,
+    x %in% c("0/1", "1/0", "0|1", "1|0") ~ 1,
+    x %in% c("1/1", "1|1") ~ 2,
+    TRUE ~ NA_real_
+  )
+})
+
+table(as.vector(gt_dosage), useNA = "ifany")
+```
+
+```{r}
+max_sample_missingness <- 90
+max_snp_missingness <- 50
+
+#Check/filter by missingness
+sample_missing <- colMeans(is.na(gt_dosage)) * 100
+summary(sample_missing)
+sort(sample_missing, decreasing = TRUE)
+
+sort(sample_missing)
+keep_samples <- sample_missing <= max_sample_missingness
+gt_dosage_filt <- gt_dosage[, keep_samples]
+dim(gt_dosage_filt)
+
+snp_missing_filt <- rowMeans(is.na(gt_dosage_filt)) * 100
+summary(snp_missing_filt)
+
+keep_snps <- snp_missing_filt <= max_snp_missingness
+gt_pca <- gt_dosage_filt[keep_snps, ]
+dim(gt_pca)
+```
+
+```{r}
+# Transpose: rows = samples, columns = loci
+gt_pca_t <- t(gt_pca)
+dim(gt_pca_t)
+```
+
+```{r}
+# Remove invariant loci
+locus_sd <- apply(gt_pca_t, 2, sd, na.rm = TRUE)
+summary(locus_sd)
+
+sum(locus_sd == 0, na.rm = TRUE)
+sum(is.na(locus_sd))
+
+gt_pca_var <- gt_pca_t[, locus_sd > 0]
+dim(gt_pca_var)
+```
+
+```{r}
+# impute remaining missing genotypes
+gt_pca_imp <- gt_pca_var
+
+for (i in seq_len(ncol(gt_pca_imp))) {
+  gt_pca_imp[is.na(gt_pca_imp[, i]), i] <- mean(gt_pca_imp[, i], na.rm = TRUE)
+}
+sum(is.na(gt_pca_imp))
+```
+
+```{r}
+#run PCA
+pca <- prcomp(gt_pca_imp, center = TRUE, scale. = TRUE)
+pve <- summary(pca)$importance[2, ] * 100
+pve[1:5]
+
+
+pca_df <- as.data.frame(pca$x)
+```
+
+```{r}
+returnPopulation <- function(pX){
+  sapply(pX, function(v){
+    if(v %in% c("p1", "p5", "p19", "p23", "p29", "p30", "p31", "p32", "p33")){
+      "aa"
+    }
+    else if(v %in% c("p7", "p17", "p28", "p34")){
+      "fp"
+    }
+    else if(v %in% c("p21")){
+      "wm"
+    }
+    else if(v %in% c("p24")){
+      "mv"
+    }
+    else if(v %in% c("p11", "p26")){
+      "ln"
+    }
+    else if(v %in% c("p13", "p15", "p27")){
+      "cp"
+    }
+    else if(v %in% c("p12", "p14")){
+      "cp"
+    }
+    else if(v %in% c("p6", "p16")){
+      "wb"
+    }
+    else if(v %in% c("p18")){
+      "lw"
+    }
+  })
+}
+
+row_names <- rownames(pca_df) # Key
+
+pops <- gsub("sexpunctata-", "", row_names)
+pops <- gsub("guttata-", "", pops)
+pops <- gsub("-..._cleaned", "", pops)
+pops <- gsub("-.._cleaned", "", pops)
+pops <- gsub("-._cleaned", "", pops)
+
+pop_id <- vapply(pops, returnPopulation, FUN.VALUE = character(1))
+
+inds <- gsub("sexpunctata-p", "", row_names)
+inds <- gsub("guttata-p", "", inds)
+inds <- gsub("_cleaned", "", inds)
+inds <- gsub("...-", "", inds)
+inds <- gsub("..-", "", inds)
+inds <- gsub(".-", "", inds)
+
+pca_df$sample <- inds
+pca_df$population <- pop_id
+head(pca_df[, c("sample", "PC1", "PC2", "PC3")])
+```
+
+```{r}
+library(ggplot2)
+
+ggplot(pca_df, aes(x = PC1, y = PC2, color = population)) +
+  geom_point(size = 3) +
+  #geom_text(vjust = -0.7, size = 2.5) +
+  labs(
+    x = paste0("PC1 (", round(pve[1], 2), "%)"),
+    y = paste0("PC2 (", round(pve[2], 2), "%)"),
+    title = "PCA after filtering high-missingness samples and loci"
+  ) +
+  theme_classic()
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+

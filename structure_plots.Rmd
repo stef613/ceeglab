@@ -1,0 +1,120 @@
+---
+title: "Structure plots"
+output: pdf_document
+date: "2026-06-10"
+---
+
+```{r}
+library(tidyverse)
+
+structure_plot <- function(file, popmap){
+  # read all lines
+  lines <- readLines(file)
+  
+  # find the start of the Q-matrix block
+  start <- grep("Inferred ancestry of individuals:", lines)
+  end <- grep("Estimated Allele Frequencies in each cluster", lines)
+  
+  # extract only the lines with ancestry values
+  q_lines <- lines[(start+1):end]
+  q_lines <- q_lines[grepl(":", q_lines)]      # keep only lines with cluster values
+  
+  # extract the numeric ancestry values
+  Q <- q_lines %>%
+    str_extract_all("[0-9]*\\.[0-9]+") %>%     # extract all decimals
+    map(as.numeric) %>%
+    do.call(rbind, .)
+  
+  # convert to data frame
+  Q <- as.data.frame(Q)
+  colnames(Q) <- paste0("K", 1:ncol(Q))
+  
+  df <- Q %>%
+    as.data.frame() %>%
+    mutate(ind = row_number()) %>%
+    pivot_longer(
+      cols = -ind,
+      names_to = "cluster",
+      values_to = "q"
+    )
+  
+  labels <- popmap |> pull(V2)
+  
+  g <- ggplot(df, aes(x = ind, y = q, fill = cluster)) +
+    geom_bar(stat = "identity", width = 1) +
+    scale_x_continuous(
+      breaks = df$ind |> unique(),
+      labels = labels
+    ) +
+    scale_y_continuous(expand = c(0,0)) +
+    #scale_x_continuous(expand = c(0,0)) +
+    labs(x = "Individuals", y = "Ancestry proportion") +
+    theme_classic() +
+    theme(
+      axis.text.x = element_text(angle = 90, hjust = 1, size = 6),
+      axis.ticks.x = element_blank()
+    )
+  return(g)
+}
+```
+
+```{r}
+species <- "sexpunctata"
+for(i in 1:3){
+  file <- paste0(species, "300_r0.5_K", i, "_replicate_1_f")
+  popmap <- read.table(paste0(species, "_100k_popmap.txt"))
+  g <- structure_plot(file, popmap)
+  print(g)
+}
+```
+
+```{r}
+# read all lines
+lines <- readLines(file)
+
+# find the start of the Q-matrix block
+start <- grep("Inferred ancestry of individuals:", lines)
+end <- grep("Estimated Allele Frequencies in each cluster", lines)
+
+# extract only the lines with ancestry values
+q_lines <- lines[(start+1):end]
+q_lines <- q_lines[grepl(":", q_lines)]      # keep only lines with cluster values
+
+# extract the numeric ancestry values
+Q <- q_lines %>%
+  str_extract_all("[0-9]*\\.[0-9]+") %>%     # extract all decimals
+  map(as.numeric) %>%
+  do.call(rbind, .)
+
+# convert to data frame
+Q <- as.data.frame(Q)
+colnames(Q) <- paste0("K", 1:ncol(Q))
+
+Q
+
+```
+
+```{r}
+df <- Q %>%
+  as.data.frame() %>%
+  mutate(ind = row_number()) %>%
+  pivot_longer(
+    cols = -ind,
+    names_to = "cluster",
+    values_to = "q"
+  )
+```
+
+```{r}
+ggplot(df, aes(x = ind, y = q, fill = cluster)) +
+  geom_bar(stat = "identity", width = 1) +
+  scale_y_continuous(expand = c(0,0)) +
+  scale_x_continuous(expand = c(0,0)) +
+  labs(x = "Individuals", y = "Ancestry proportion") +
+  theme_classic() +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
+
+```

@@ -1,0 +1,628 @@
+---
+title: "leaflet map"
+output: pdf_document
+date: "2026-04-05"
+---
+
+# map code with leaflet
+```{r}
+library(leaflet)
+library(readxl)
+library(gt)
+library(dplyr)
+library(ggplot2)
+```
+
+```{r setting up data}
+unique_populations <- c("p1", "p13", "p7", "p6", "p18", "p21", "p24", "p11")
+guttata_present <- c(1, 0, 1, 1, 1, 0, 1, 1)
+locations <- read_xlsx("C:/Users/slind/OneDrive/Desktop/Strickland Lab/UROP/Stef Summer 25 UROP data sheet.xlsx")
+locations <- locations %>%
+  select(population_id, location, lat, lon) %>%
+  filter(population_id %in% unique_populations) %>%
+  mutate(guttata = guttata_present) %>%
+  rename(lng = lon) %>%
+  mutate(lng = as.numeric(lng)) %>%
+  mutate(lat = as.numeric(lat)) %>% 
+  mutate(nguttata = c(8, 0, 10, 3, 6, 0, 7, 11)) %>%
+  mutate(nsexpunctata = c(11, 2, 11, 8, 13, 10, 8, 11)) %>%
+  add_row(population_id = "p0", location = "legend", lat = 41.75, lng = -73, guttata = 1, nguttata = 10, nsexpunctata = 10)
+```
+
+overview map
+```{r graphing}
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  setView(lng = -72, lat = 42, zoom = 8) %>%
+  addCircleMarkers(data = locations, color = ifelse(locations$guttata, "blue", "black")) %>%
+  addScaleBar()
+```
+
+sexpunctata map
+```{r graphing}
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  setView(lng = -72, lat = 42, zoom = 8) %>%
+  addCircleMarkers(data = locations, color = "blue", radius = locations$nsexpunctata * 1.5) %>%
+  addScaleBar()
+```
+
+guttata map
+```{r graphing}
+guttata_locations <- locations |> filter(nguttata > 0)
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  setView(lng = -72, lat = 42, zoom = 8) %>%
+  addCircleMarkers(data = guttata_locations, color = "blue", radius = guttata_locations$nguttata * 1.5)
+```
+
+# collections results table
+```{r}
+collections_numbers <- read_xlsx("C:/Users/slind/OneDrive/Desktop/Strickland Lab/UROP/collection results table.xlsx")
+
+collections_numbers %>% gt()
+```
+
+# FST vs pairwise distance
+```{r}
+distance <- function(lat1, lon1, lat2, lon2){
+  delta_lat <- abs(lat1 - lat2)
+  delta_lon <- abs(lon1 - lon2)
+  distance <- sqrt(delta_lon^2 + delta_lat^2)
+  
+  return(distance)
+}
+```
+
+```{r}
+pairwise_distances <- data.frame(num = 1:28) %>%
+  mutate(distance = NA) %>%
+  mutate(pop1 = NA) %>% mutate(pop2 = NA)
+
+collections_numbers <- collections_numbers %>%
+  mutate(Latitude = as.numeric(Latitude)) %>%
+  mutate(Longitude = as.numeric(Longitude)) %>%
+  mutate(abbreviation = c("aa", "fr", "wb", "ln", "cp", "lw", "wm", "mv", NA))
+
+k <- 1
+for (i in 1:7){
+  i_ <- i + 1
+  for (j in i_:8){
+    pairwise_distances$distance[k] <-  distance(collections_numbers$Latitude[i], collections_numbers$Longitude[i], collections_numbers$Latitude[j], collections_numbers$Longitude[j])
+    
+    pairwise_distances$pop1[k] <- collections_numbers$abbreviation[i]
+    pairwise_distances$pop2[k] <- collections_numbers$abbreviation[j]
+    
+    k <- k + 1
+  }
+}
+
+pairwise_distances <- pairwise_distances %>%
+  mutate(distance_miles = 0.75 * 69 * distance) %>%
+  mutate(distance_km = c(25.61, 40.83, 21.57, 5.81, 4.06, 173.41, 112.90, 15.49, 15.52, 22.84, 27.46, 148.40, 123.88, 25.33, 37.42, 42.28, 132.92, 135.13, 16.16, 20.96, 154.25, 131.49, 5.00, 169.28, 118.53, 174.28, 115.91, 251.16)) %>%
+  mutate(guttataFST = c(0.0710963, NA, 0.110468, 0.0828874, NA, 0.0818325, 0.0708617, NA, 0.0926659, 0.0759845, NA, 0.0710542, 0.0613422, NA, NA, NA, NA, NA, 0.136141, NA, 0.100807, 0.0929119, NA, 0.0818325, 0.0708617, NA, NA, 0.0755645)) %>%
+  mutate(sexpunctataFST = c(NA, 0.0842116, 0.0720331, 0.0530477, 0.0614377, 0.0297907, 0.055273, NA, NA, NA, NA, NA, NA, 0.10888, 0.0632882, 0.082097, 0.121969, 0.113315, 0.0637901, 0.0765241, 0.0806361, 0.0714865, 0.0552167, 0.0653228, 0.0423687, 0.0705592, 0.0585641, 0.0533866))
+
+ggplot(pairwise_distances, aes(x=distance_km, y=guttataFST)) +
+  geom_point() +
+  xlab("Geographic Distance (km)") +
+  ylab(expression(F[ST])) +
+  ggtitle(expression("Relationship Between " * F[ST] * " and Distance Between D. guttata Populations"))
+
+ggplot(pairwise_distances, aes(x=distance_km, y=sexpunctataFST)) +
+  geom_point() +
+  xlab("Geographic Distance (km)") +
+  ylab(expression(F[ST])) +
+  ggtitle(expression("Relationship Between " * F[ST] * " and Distance Between C. sexpunctata Populations"))
+
+ggplot(pairwise_distances, aes(x=distance_km)) +
+  geom_point(aes(y = guttataFST, shape = "D. guttata")) +
+  geom_point(aes(y = sexpunctataFST, shape = "C. sexpunctata")) +
+  xlab("Geographic Distance (km)") +
+  ylab(expression(F[ST])) +
+  ggtitle(expression("Relationship Between " * F[ST] * " and Distance Between D. guttata Populations")) +
+  scale_shape_manual(values = c("C. sexpunctata" = 16, "D. guttata" = 17))
+```
+
+#linear models
+```{r sexpunctata}
+sexpunctata.ols <- lm(pairwise_distances$sexpunctataFST ~ pairwise_distances$distance_miles)
+predict.sexpunctata <- predict(sexpunctata.ols)
+
+summary(sexpunctata.ols)
+
+stanRes.sexpunctata <- rstandard(sexpunctata.ols)
+graph.sexpunctata <- pairwise_distances |> 
+  filter(!is.na(sexpunctataFST)) |>
+  mutate(stanRes.sexpunctata)
+
+ggplot(graph.sexpunctata, aes(x = distance_miles, y = stanRes.sexpunctata)) +
+  geom_point() +
+  geom_hline(yintercept = 2) +
+  geom_hline(yintercept = -2) +
+  labs(title = "ordinary least squares")
+
+ggplot(graph.sexpunctata, aes(sample = sexpunctataFST)) +
+  stat_qq() +
+  stat_qq_line() +
+  labs(
+    title = "Normal Q–Q Plot",
+    x = "Theoretical Quantiles",
+    y = "Sample Quantiles"
+  )
+
+ggplot(graph.sexpunctata, aes(x=distance_km, y=sexpunctataFST)) +
+  geom_point() +
+  xlab("Geographic Distance (km)") +
+  ylab(expression(F[ST])) +
+  ggtitle(expression("Relationship Between " * F[ST] * " and Distance Between D. sexpunctata Populations")) +
+  ylim(0.02, 0.13)
+
+ggplot(graph.sexpunctata, aes(x=distance_km, y=sexpunctataFST)) +
+  geom_point() +
+  geom_line(mapping = aes(x = distance_km, y = predict.sexpunctata), color = "blue", size = 1) +
+  xlab("Geographic Distance (km)") +
+  ylab(expression(F[ST])) +
+  ggtitle(expression("Relationship Between " * F[ST] * " and Distance Between D. sexpunctata Populations")) +
+  ylim(0.02, 0.13)
+
+ggplot(graph.sexpunctata, aes(x=distance_km, y=sexpunctataFST)) +
+  geom_point() +
+  geom_smooth(formula = y ~ x, method = "lm") + 
+  xlab("Geographic Distance (km)") +
+  ylab(expression(F[ST])) +
+  ggtitle(expression("Relationship Between " * F[ST] * " and Distance Between D. sexpunctata Populations")) +
+  ylim(0.02, 0.13)
+```
+
+```{r guttata}
+guttata.ols <- lm(pairwise_distances$guttataFST ~ pairwise_distances$distance_km)
+predict.guttata <- predict(guttata.ols)
+
+summary(guttata.ols)
+
+stanRes.guttata <- rstandard(guttata.ols)
+graph.guttata <- pairwise_distances |> 
+  filter(!is.na(guttataFST)) |>
+  mutate(stanRes.guttata)
+
+ggplot(graph.guttata, aes(x = distance_km, y = stanRes.guttata)) +
+  geom_point() +
+  geom_hline(yintercept = 2) +
+  geom_hline(yintercept = -2) +
+  labs(title = "ordinary least squares")
+
+ggplot(graph.guttata, aes(sample = guttataFST)) +
+  stat_qq() +
+  stat_qq_line() +
+  labs(
+    title = "Normal Q–Q Plot",
+    x = "Theoretical Quantiles",
+    y = "Sample Quantiles"
+  )
+
+ggplot(graph.guttata, aes(x=distance_km, y=guttataFST)) +
+  geom_point() +
+  xlab("Geographic Distance (km)") +
+  ylab(expression(F[ST])) +
+  ggtitle(expression("Relationship Between " * F[ST] * " and Distance Between D. guttata Populations")) +
+  ylim(0.04, 0.14)
+
+ggplot(graph.guttata, aes(x=distance_km, y=guttataFST)) +
+  geom_point() +
+  geom_line(mapping = aes(x = distance_km, y = predict.guttata), color = "blue", size = 1) +
+  xlab("Geographic Distance (km)") +
+  ylab(expression(F[ST])) +
+  ggtitle(expression("Relationship Between " * F[ST] * " and Distance Between D. guttata Populations")) +
+  ylim(0.04, 0.14)
+
+ggplot(graph.guttata, aes(x=distance_km, y=guttataFST)) +
+  geom_point() +
+  geom_smooth(formula = y ~ x, method = "lm") + 
+  xlab("Geographic Distance (km)") +
+  ylab(expression(F[ST])) +
+  ggtitle(expression("Relationship Between " * F[ST] * " and Distance Between D. guttata Populations")) +
+  ylim(0.04, 0.14)
+```
+
+# FST heatmaps
+```{r}
+library(pheatmap)
+```
+
+```{r}
+guttataFST <- read.csv("C:/Users/slind/OneDrive/Desktop/Strickland Lab/honors thesis code/guttataFST.csv", row.names = 1) |>
+  as.matrix()
+#diag(guttataFST) <- 1
+guttataFST[lower.tri(guttataFST)] <- t(guttataFST)[lower.tri(guttataFST)]
+
+pheatmap(
+  guttataFST,
+  cluster_rows = TRUE,
+  cluster_cols = TRUE,
+  display_numbers = TRUE,
+  number_format = "%.2f",
+  main = expression("Pairwise " * F[ST] * " Between D. guttata Populations"),
+  color = colorRampPalette(c("white", "orange", "red"))(50)
+)
+```
+
+```{r}
+sexpunctataFST <- read.csv("C:/Users/slind/OneDrive/Desktop/Strickland Lab/honors thesis code/sexpunctataFST.csv", row.names = 1) |>
+  as.matrix()
+#diag(sexpunctataFST) <- 1
+sexpunctataFST[lower.tri(sexpunctataFST)] <- t(sexpunctataFST)[lower.tri(sexpunctataFST)]
+#sexpunctataFST[, 6] <- NA
+#sexpunctataFST[6, ] <- NA
+
+pheatmap(
+  sexpunctataFST,
+  cluster_rows = TRUE,
+  cluster_cols = TRUE,
+  display_numbers = TRUE,
+  number_format = "%.2f",
+  main = expression("Pairwise " * F[ST] * " Between C. sexpunctata Populations"),
+  color = colorRampPalette(c("white", "orange", "red"))(50)
+)
+```
+
+# coverage table
+```{r}
+coverage <- read.csv("coverage_parameter_exploration.csv") |>
+  filter(!is.na(m))
+
+coverage_guttata <- coverage |>
+  filter(substring(run, 1, 1) == "g") |>
+  select(!run) |>
+  arrange(m) |>
+  arrange(M)
+
+coverage_sexpunctata <- coverage |>
+  filter(substring(run, 1, 1) == "s") |>
+  select(!run) |>
+  arrange(m) |>
+  arrange(M)
+
+joined_coverage <- coverage_guttata |>
+  left_join(coverage_sexpunctata, by = c("m", "M", "n"))
+```
+
+```{r}
+joined_coverage |> gt() |>
+  cols_label(
+    mean.x = "Mean",
+    stdev.x = "SD",
+    min.x = "Min",
+    max.x = "Max",
+    mean.y = "Mean",
+    stdev.y = "SD",
+    min.y = "Min",
+    max.y = "Max"
+  ) |>
+  tab_spanner(
+    label = "Parameters",
+    columns = c(m, M, n)
+  ) |>
+  tab_spanner(
+    label = "D. guttata Coverage",
+    columns = c(mean.x, stdev.x, min.x, max.x)
+  ) |>
+  tab_spanner(
+    label = "C. sexpunctata Coverage",
+    columns = c(mean.y, stdev.y, min.y, max.y)
+  ) #|>
+  #gtsave("coverage_table.html")
+```
+
+# clean and raw reads
+```{r}
+clean_reads <- read.csv("clean_reads.csv") |>
+  mutate(sample = substr(sample, 0, nchar(sample) - 14)) |>
+  mutate(total = R1 + R2)
+
+guttata_clean_reads <- clean_reads |>
+  filter(substring(sample, 1, 1) == "g")
+
+sexpunctata_clean_reads <- clean_reads |>
+  filter(substring(sample, 1, 1) == "s")
+
+ggplot(guttata_clean_reads, aes(x = log10(total))) +
+  geom_histogram() +
+  xlab(expression(log[10] ~ "Number of Reads")) +
+  ylab("Frequency") +
+  geom_vline(xintercept = 5) +
+  theme_bw()
+
+ggplot(guttata_clean_reads, aes(x = reorder(sample, -total), y = log10(total))) +
+  geom_bar(position="dodge", stat="identity") +
+  ylab(expression(log[10] ~ "Number of Reads")) +
+  geom_hline(yintercept = 5) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+ggplot(sexpunctata_clean_reads, aes(x = log10(total))) +
+  geom_histogram() +
+  xlab(expression(log[10] ~ "Number of Reads")) +
+  ylab("Frequency") +
+  geom_vline(xintercept = 5) +
+  theme_bw()
+
+ggplot(sexpunctata_clean_reads, aes(x = reorder(sample, -total), y = log10(total))) +
+  geom_bar(position="dodge", stat="identity") +
+  ylab(expression(log[10] ~ "Number of Reads")) +
+  geom_hline(yintercept = 5) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+```{r}
+missingness_sexpunctata <- read.csv("missingness - sexpunctata200 (old).csv")
+ggplot(missingness_sexpunctata, aes(x = F_MISS)) +
+  geom_histogram() +
+  xlab("%missingness") +
+  ylab("Frequency") +
+  theme_bw()
+
+ggplot(missingness_sexpunctata, aes(x = reorder(INDV, -F_MISS), y = F_MISS)) +
+  geom_bar(position="dodge", stat="identity") +
+  ylab(expression("%missingness")) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+missingness_guttata <- read.csv("missingness - guttata200 (old).csv")
+ggplot(missingness_guttata, aes(x = F_MISS)) +
+  geom_histogram() +
+  xlab("%missingness") +
+  ylab("Frequency") +
+  theme_bw()
+
+ggplot(missingness_guttata, aes(x = reorder(INDV, -F_MISS), y = F_MISS)) +
+  geom_bar(position="dodge", stat="identity") +
+  ylab(expression("%missingness")) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+raw_reads <- read.csv("raw_reads.csv") |>
+  mutate(sample = substr(sample, 0, nchar(sample) - 6)) |>
+  mutate(num = substr(sample, nchar(sample), nchar(sample)))
+
+temp.1 <- raw_reads |> filter(num == 1) |>
+  mutate(sample = substr(sample, 0, nchar(sample) - 2)) |>
+  select(!num) |>
+  rename(R1.raw = reads)
+
+temp.2 <- raw_reads |> filter(num == 2) |>
+  mutate(sample = substr(sample, 0, nchar(sample) - 2)) |>
+  select(!num) |>
+  rename(R2.raw = reads)
+
+reads <- temp.1 |> left_join(temp.2) |> left_join(clean_reads)
+
+```
+```{r}
+guttata_reads <- reads |>
+  filter(substring(sample, 1, 1) == "g")
+
+sexpunctata_reads <- reads |>
+  filter(substring(sample, 1, 1) == "s")
+
+ggplot(guttata_reads, aes(x = log10(R1.raw))) +
+  geom_histogram() +
+  theme_bw()
+
+ggplot(sexpunctata_reads, aes(x = log10(R1.raw))) +
+  geom_histogram() +
+  theme_bw()
+```
+
+# ---post grad---
+```{r}
+pie_guttata <- collections_numbers |>
+  select(Site, `No. D. guttata sequenced`) |>
+  filter(Site != "Total") |>
+  filter(`No. D. guttata sequenced` > 0) |>
+  mutate(removed = c(1, 0, 0, 1, 0, 2)) |>
+  mutate(retained = `No. D. guttata sequenced` - removed)
+pie(pie_guttata$`No. D. guttata sequenced`, labels = pie_guttata$Site)
+pie(pie_guttata$retained, labels = pie_guttata$Site)
+removed_guttata <- pie_guttata |> filter(removed > 0)
+pie(removed_guttata$removed, labels = removed_guttata$Site)
+```
+
+```{r}
+returnPopulation <- function(pX){
+  sapply(pX, function(v){
+    if(v %in% c("p1", "p5", "p19", "p23", "p29", "p30", "p31", "p32", "p33")){
+      "aa"
+    }
+    else if(v %in% c("p7", "p17", "p28", "p34")){
+      "fp"
+    }
+    else if(v %in% c("p21")){
+      "wm"
+    }
+    else if(v %in% c("p24")){
+      "mv"
+    }
+    else if(v %in% c("p11", "p26")){
+      "ln"
+    }
+    else if(v %in% c("p13", "p15", "p27")){
+      "cp"
+    }
+    else if(v %in% c("p12", "p14")){
+      "cp"
+    }
+    else if(v %in% c("p6", "p16")){
+      "wb"
+    }
+    else if(v %in% c("p18")){
+      "lw"
+    }
+  })
+}
+```
+
+```{r}
+clean_reads <- clean_reads %>%
+  mutate(sample = sub("\\..*", "", sample)) %>%
+  mutate(species = ifelse(substr(sample, 1, 1) == "s", "sexpunctata", "guttata")) %>%
+  mutate(pX = regmatches(sample, regexpr("p\\d+", sample))) %>%
+  mutate(population = returnPopulation((pX)))
+
+reads_guttata <- clean_reads |>
+  filter(species == "guttata") |>
+  group_by(population) |>
+  summarise(reads = sum(total)) |>
+  mutate(order = c(1, 4, 2, 3, 6, 5)) |>
+  arrange(order)
+pie(reads_guttata$reads, labels = reads_guttata$population)
+avg_reads_guttata <- clean_reads |>
+  filter(species == "guttata") |>
+  group_by(population) |>
+  summarise(avg_reads = mean(total))
+gt(avg_reads_guttata)
+```
+
+```{r}
+pie_sexpunctata <- collections_numbers |>
+  select(Site, `No. C. sexpunctata sequenced`) |>
+  filter(Site != "Total") |>
+  filter(`No. C. sexpunctata sequenced` > 0) |>
+  mutate(removed = c(3, 5, 0, 3, 2, 1, 3, 3)) |>
+  mutate(retained = `No. C. sexpunctata sequenced` - removed)
+pie(pie_sexpunctata$`No. C. sexpunctata sequenced`, labels = pie_sexpunctata$Site)
+pie(pie_sexpunctata$retained, labels = pie_sexpunctata$Site)
+removed_sexpunctata <- pie_sexpunctata |> filter(removed > 0)
+pie(removed_sexpunctata$removed, labels = removed_sexpunctata$Site)
+```
+
+```{r}
+clean_reads <- clean_reads %>%
+  mutate(sample = sub("\\..*", "", sample)) %>%
+  mutate(species = ifelse(substr(sample, 1, 1) == "s", "sexpunctata", "guttata")) %>%
+  mutate(pX = regmatches(sample, regexpr("p\\d+", sample))) %>%
+  mutate(population = returnPopulation((pX)))
+
+reads_sexpunctata <- clean_reads |>
+  filter(species == "sexpunctata") |>
+  group_by(population) |>
+  summarise(reads = sum(total)) |>
+  mutate(order = c(1, 5, 2, 4, 6, 8, 3, 7)) |>
+  arrange(order)
+pie(reads_sexpunctata$reads, labels = reads_sexpunctata$population)
+avg_reads_sexpunctata <- clean_reads |>
+  filter(species == "sexpunctata") |>
+  group_by(population) |>
+  summarise(avg_reads = mean(total))
+gt(avg_reads_sexpunctata)
+```
+
+```{r}
+collections_numbers <- read_xlsx("C:/Users/slind/OneDrive/Desktop/Strickland Lab/UROP/collection results table.xlsx")
+
+pairwise_distances <- data.frame(num = 1:28) %>%
+  mutate(distance = NA) %>%
+  mutate(pop1 = NA) %>% mutate(pop2 = NA)
+
+collections_numbers <- collections_numbers %>%
+  mutate(Latitude = as.numeric(Latitude)) %>%
+  mutate(Longitude = as.numeric(Longitude)) %>%
+  mutate(abbreviation = c("aa", "fr", "wb", "ln", "cp", "lw", "wm", "mv", NA))
+
+k <- 1
+for (i in 1:7){
+  i_ <- i + 1
+  for (j in i_:8){
+    
+    pairwise_distances$pop1[k] <- collections_numbers$abbreviation[i]
+    pairwise_distances$pop2[k] <- collections_numbers$abbreviation[j]
+    
+    k <- k + 1
+  }
+}
+
+pairwise_distances <- pairwise_distances %>%
+  mutate(distance_km = c(25.61, 40.83, 21.57, 5.81, 4.06, 173.41, 112.90, 15.49, 15.52, 22.84, 27.46, 148.40, 123.88, 25.33, 37.42, 42.28, 132.92, 135.13, 16.16, 20.96, 154.25, 131.49, 5.00, 169.28, 118.53, 174.28, 115.91, 251.16)) %>%
+  mutate(guttataFST = c(0.0826721, NA, 0.140468, 0.112503, NA, 0.0962271, 0.0848325, NA, 0.112947, 0.0977298, NA, 0.0863273, 0.0791836, NA, NA, NA, NA, NA, 0.176174, NA, 0.138166, 0.119862, NA, 0.114708, 0.100105, NA, NA, 0.0912547)) %>%
+  mutate(sexpunctataFST = c(0.142408, 0.15751, 0.106592, 0.0695049, 0.0784323, 0.107317, 0.0913212, 0.202326, 0.123052, 0.0880564, 0.0952046, 0.142408, 0.114636, 0.207283, 0.0977834, 0.11961, 0.217657, 0.15999, 0.081596, 0.0923217, 0.13037, 0.109245, 0.0634409, 0.0823843, 0.0741517, 0.0971866, 0.0826341, 0.113946))
+# fst values for species300_r0.5
+
+ggplot(pairwise_distances, aes(x=distance_km, y=guttataFST)) +
+  geom_point() +
+  xlab("Geographic Distance (km)") +
+  ylab(expression(F[ST])) +
+  ggtitle(expression("Relationship Between " * F[ST] * " and Distance Between D. guttata Populations"))
+
+ggplot(pairwise_distances, aes(x=distance_km, y=sexpunctataFST)) +
+  geom_point() +
+  xlab("Geographic Distance (km)") +
+  ylab(expression(F[ST])) +
+  ggtitle(expression("Relationship Between " * F[ST] * " and Distance Between C. sexpunctata Populations"))
+
+ggplot(pairwise_distances, aes(x=distance_km)) +
+  geom_point(aes(y = guttataFST, shape = "D. guttata"), size = 2, color = "blue") +
+  geom_point(aes(y = sexpunctataFST, shape = "C. sexpunctata"), size = 2, color = "black") +
+  geom_smooth(mapping = aes(y = sexpunctataFST, x = distance_km), formula = y ~ x, method = "lm", se = FALSE, color = "black") +
+  geom_smooth(mapping = aes(y = guttataFST, x = distance_km), formula = y ~ x, method = "lm", se = FALSE, color = "blue") +
+  xlab("Geographic Distance (km)") +
+  ylab(expression(F[ST])) +
+  ggtitle(expression(F[ST] * " vs. Distance Between Populations of C. sexpunctata and D. guttata")) +
+  scale_shape_manual(values = c("C. sexpunctata" = 16, "D. guttata" = 17)) +
+  theme(
+    axis.title = element_text(size = 14)
+  )
+```
+
+```{r}
+library(pheatmap)
+sexpunctataFST <- read.csv("C:/Users/slind/OneDrive/Desktop/Strickland Lab/honors thesis code/sexpunctata300_r0.5_fst.csv", row.names = 1) |>
+  as.matrix() #had to add an additional blank row at the bottom of the spreadsheet a priori
+
+sexpunctataFST[lower.tri(sexpunctataFST)] <- t(sexpunctataFST)[lower.tri(sexpunctataFST)]
+
+pheatmap(
+  sexpunctataFST,
+  cluster_rows = TRUE,
+  cluster_cols = TRUE,
+  display_numbers = TRUE,
+  number_format = "%.2f",
+  main = expression("Pairwise " * F[ST] * " Between C. sexpunctata Populations"),
+  color = colorRampPalette(c("white", "orange", "red"))(50)
+)
+```
+
+```{r}
+library(pheatmap)
+guttataFST <- read.csv("C:/Users/slind/OneDrive/Desktop/Strickland Lab/honors thesis code/guttata300_r0.5_fst.csv", row.names = 1) |>
+  as.matrix() #had to add an additional blank row at the bottom of the spreadsheet a priori
+
+guttataFST[lower.tri(guttataFST)] <- t(guttataFST)[lower.tri(guttataFST)]
+
+pheatmap(
+  guttataFST,
+  cluster_rows = TRUE,
+  cluster_cols = TRUE,
+  display_numbers = TRUE,
+  number_format = "%.2f",
+  main = expression("Pairwise " * F[ST] * " Between D. guttata Populations"),
+  color = colorRampPalette(c("white", "orange", "red"))(50)
+)
+```
+
+#obs vs exp heterozigosity
+```{r}
+library(ggplot2)
+heterozigosity <- read.csv("populations.sumstats_summary - Heterozigosity.csv")
+
+ggplot(data = heterozigosity, mapping = aes(x = Exp_Het, y = Obs_Het, color = species, shape = species)) +
+  geom_point(size = 2) +
+  geom_abline(slope = 1, intercept = 0, linetype = 2) +
+  scale_x_continuous(limits = c(0, 0.0075)) +
+  scale_y_continuous(limits = c(0, 0.0075)) +
+  scale_color_manual(values = c("guttata" = "blue", "sexpunctata" = "black")) +
+  scale_shape_manual(values = c("guttata" = 17, "sexpunctata" = 16)) +
+  ggtitle("Observed vs. Expected Heterozigosity for Each Population of C. sexpunctata and D. guttata") +
+  xlab("Expected Heterozigosity (fraction of loci)") +
+  ylab("Observed Heterozigosity (fraction of loci)") +
+  theme(
+    axis.title = element_text(size = 14)
+  )
+```

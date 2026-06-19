@@ -1,0 +1,158 @@
+---
+title: "parameter exploration"
+output: pdf_document
+date: "2026-02-27"
+---
+
+```{r}
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+parameters <- read.csv("coverage_100k.csv", header = TRUE) |>
+  filter(!is.na(mean))
+#parameters <- read.csv("coverage_parameter_exploration.csv", header = TRUE) |>
+  #filter(!is.na(mean))
+
+populations <- read.csv("populations_100k.csv")
+#populations <- read.csv("paired_populations.csv")
+```
+
+#guttata
+```{r}
+guttata_parameters <- parameters |>
+  filter(substring(run, 1, 1) == "g") |>
+  filter(nchar(run) == 10) |>
+  filter(substr(run, nchar(run) - 2, nchar(run) - 2) == "3")
+
+ggplot(guttata_parameters, aes(x = interaction(M, m), y = mean, color = factor(n))) +
+  # SD error bars
+  geom_errorbar(aes(ymin = mean - stdev, ymax = mean + stdev),
+                width = 0.15, linewidth = 0.6,
+                position = position_dodge(width = 0.6)) +
+  
+  # Mean point
+  geom_point(size = 3,
+                position = position_dodge(width = 0.6)) +
+  
+  # Min and max points
+  geom_point(aes(y = min), shape = 17, size = 2, position = position_dodge(width = 0.6)) +
+  geom_point(aes(y = max), shape = 17, size = 2, position = position_dodge(width = 0.6)) +
+  
+  scale_y_continuous(breaks = seq(0, 100, by = 5)) +
+  
+  ylab("Coverage") +
+  theme_classic()
+```
+
+```{r}
+guttata_populations <- populations |> filter(species == "guttata")
+
+guttata_populations <- guttata_parameters |> 
+  left_join(guttata_populations) |>
+  filter(r == 0.8) |>
+  mutate(color = case_when(
+    M > n ~ "n = M - 1",
+    M < n ~ "n = M + 1",
+    TRUE ~ "n = M"
+  ))
+
+ggplot(guttata_populations, aes(x = M, y = retained_reads, shape = factor(m), color = color)) +
+  geom_point(size = 3) +
+  labs(title = "guttata -r 0.8")
+  #geom_line() #+
+  #scale_x_continuous(breaks = seq(0.2, 0.8, by = 0.1)) #+
+  #scale_y_log10()
+  
+```
+
+```{r}
+guttata_populations <- populations |> filter(species == "guttata")
+
+guttata_populations <- guttata_parameters |> 
+  left_join(guttata_populations)
+
+ggplot(guttata_populations, aes(x = r, y = retained_reads, group = run)) +
+  labs(title = "guttata", y = "log retained reads", x = "r") +
+  geom_line() +
+  scale_x_continuous(breaks = seq(0.2, 0.8, by = 0.3)) +
+  scale_y_log10()
+```
+
+#sexpunctata
+```{r}
+sexpunctata_parameters <- parameters |>
+  filter(substring(run, 1, 1) == "s") |>
+  filter(nchar(run) == 14) |>
+  filter(substr(run, nchar(run) - 2, nchar(run) - 2) == "3")
+
+ggplot(sexpunctata_parameters, aes(x = interaction(M, m), y = mean, color = factor(n))) +
+  # SD error bars
+  geom_errorbar(aes(ymin = mean - stdev, ymax = mean + stdev),
+                width = 0.15, linewidth = 0.6,
+                position = position_dodge(width = 0.6)) +
+  
+  # Mean point
+  geom_point(size = 3,
+                position = position_dodge(width = 0.6)) +
+  
+  # Min and max points
+  geom_point(aes(y = min), shape = 17, size = 2, position = position_dodge(width = 0.6)) +
+  geom_point(aes(y = max), shape = 17, size = 2, position = position_dodge(width = 0.6)) +
+  
+  scale_y_continuous(breaks = seq(0, 100, by = 5)) +
+  
+  ylab("Coverage") +
+  theme_classic()
+```
+
+```{r}
+sexpunctata_populations <- populations |> filter(species == "sexpunctata")
+
+sexpunctata_populations <- sexpunctata_parameters |> 
+  left_join(sexpunctata_populations) |>
+  filter(r == 0.8) |>
+  mutate(color = case_when(
+    M > n ~ "n = M - 1",
+    M < n ~ "n = M + 1",
+    TRUE ~ "n = M"
+  ))
+
+ggplot(sexpunctata_populations, aes(x = M, y = retained_reads, shape = factor(m), color = color)) +
+  geom_point(size = 3) +
+  labs(title = "sexpunctata -r 0.8")
+  #geom_line() #+
+  #scale_x_continuous(breaks = seq(0.2, 0.8, by = 0.1)) #+
+  #scale_y_log10()
+  
+```
+
+```{r}
+sexpunctata_populations <- populations |> filter(species == "sexpunctata")
+
+sexpunctata_populations <- sexpunctata_parameters |> 
+  left_join(sexpunctata_populations) 
+  #filter(r == 0.5) #|>
+  #filter(m == 7)
+
+#r_exploration <- r_exploration |> filter(r > 0.55)
+
+ggplot(sexpunctata_populations, aes(x = r, y = retained_reads, group = run)) +
+  labs(title = "sexpunctata", y = "log retained reads", x = "r") +
+  geom_line() +
+  scale_x_continuous(breaks = seq(0.2, 0.8, by = 0.3)) +
+  scale_y_log10()
+```
+
+```{r}
+combined_graph <- populations |>
+  filter(run == "guttata300" | run == "sexpunctata300") |>
+  mutate(numind = ifelse(species == "guttata", 41, 54)) |>
+  mutate(normalized_reads = retained_reads / numind)
+ggplot(combined_graph, aes(x = r, y = normalized_reads, group = run, color = run)) +
+  geom_line(size = 2) +
+  scale_x_continuous(breaks = seq(0.2, 0.8, by = 0.3)) +
+  scale_y_log10() +
+  labs(title = "retained reads per individual (normalized)")
+```

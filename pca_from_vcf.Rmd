@@ -1,0 +1,300 @@
+---
+title: "vcf analysis"
+output: pdf_document
+date: "2026-02-27"
+---
+https://rstudio-pubs-static.s3.amazonaws.com/975097_5afd0f5ab3fe4d76a93faccff2fda3c2.html
+```{r}
+library(vcfR)
+library(vegan)
+library(ggplot2)
+library(ggpubr)
+```
+
+```{r}
+snps <- vcfR::read.vcfR("C:/Users/slind/OneDrive/Desktop/Strickland Lab/honors thesis code/guttata300_r0.5.snps.vcf", convertNA  = TRUE)
+```
+Creating a matrix of SNP data that contains numeric scores - important to have numeric rather than character data for further analysis. Birds homozygous for reference allele get a 0, homozygous for minor allele get 2, and heterozygous get 1 for each SNP.
+```{r}
+snps_num <- vcfR::extract.gt(snps, 
+           element = "GT",
+           IDtoRowNames  = F,
+           as.numeric = T,
+           convertNA = T,
+           return.alleles = F)
+```
+
+VCF files are organized with SNPs in rows and samples (birds samples) in columns. We must flip the orientation of the matrix so that the SNPs (features) are in columns and samples are in rows since this format is required for many analysis tools.
+```{r}
+snps_num_t <- t(snps_num) 
+snps_num_df <- data.frame(snps_num_t) 
+```
+
+We are writing a function that takes a vector counts up the number of NAs it contains. The indices of the vector’s NAs are returned.
+```{r}
+find_NAs <- function(x){
+  NAs_TF <- is.na(x)
+  i_NA <- which(NAs_TF == TRUE)
+  N_NA <- length(i_NA)
+  
+  cat("Results:",N_NA, "NAs present\n.")
+  return(i_NA)
+}
+```
+
+We are using a for loop to search through each row (birds in study) for the number and location of NAs using the function find_NAs created above. This information is stored in a vector for later use in determining whether a sample should be removed.
+```{r}
+# N_rows
+# number of rows (individuals)
+N_rows <- nrow(snps_num_t)
+
+# N_NA
+# vector to hold output (number of NAs)
+N_NA   <- rep(x = 0, times = N_rows)
+
+# N_SNPs
+# total number of columns (SNPs)
+N_SNPs <- ncol(snps_num_t)
+
+# the for() loop
+for(i in 1:N_rows){
+  
+  # for each row, find the location of
+  ## NAs with snps_num_t()
+  i_NA <- find_NAs(snps_num_t[i,]) 
+  
+  # then determine how many NAs
+  ## with length()
+  N_NA_i <- length(i_NA)
+  
+  # then save the output to 
+  ## our storage vector
+  N_NA[i] <- N_NA_i
+}
+```
+
+We are creating a histogram of the frequency of NAs in every row (individual). The cutoff is >50% which is equal to the number of SNPs(.5) and is plotted on the histogram.
+```{r}
+# 50% of N_SNPs
+cutoff50 <- N_SNPs*0.5
+
+hist(N_NA)            
+abline(v = cutoff50, 
+       col = 2, 
+       lwd = 2, 
+       lty = 2)
+```
+Here, we determined how many NAs are in each row and we created an object that only contains the rows that had less than 50% of the data as NAs.
+```{r}
+#percent_NA <- N_NA/N_SNPs*100
+
+# Call which() on percent_NA
+#i_NA_50percent <- which(percent_NA > 50) 
+
+#snps_num_t02 <- snps_num_t[-i_NA_50percent, ]
+```
+
+Here, we reduce the sample names down to just the population code, which tells us where the data was sampled from. Lastly, we created a frequency table that tells us how many samples were taken from each of the population codes.
+
+```{r}
+returnPopulation <- function(pX){
+  sapply(pX, function(v){
+    if(v %in% c("p1", "p5", "p19", "p23", "p29", "p30", "p31", "p32", "p33")){
+      "aa"
+    }
+    else if(v %in% c("p7", "p17", "p28", "p34")){
+      "fp"
+    }
+    else if(v %in% c("p21")){
+      "wm"
+    }
+    else if(v %in% c("p24")){
+      "mv"
+    }
+    else if(v %in% c("p11", "p26")){
+      "ln"
+    }
+    else if(v %in% c("p13", "p15", "p27")){
+      "cp"
+    }
+    else if(v %in% c("p12", "p14")){
+      "cp"
+    }
+    else if(v %in% c("p6", "p16")){
+      "wb"
+    }
+    else if(v %in% c("p18")){
+      "lw"
+    }
+  })
+}
+```
+
+```{r}
+row_names <- row.names(snps_num_t) # Key
+
+pops <- gsub("sexpunctata-", "", row_names)
+pops <- gsub("guttata-", "", pops)
+pops <- gsub("-..._cleaned", "", pops)
+pops <- gsub("-.._cleaned", "", pops)
+pops <- gsub("-._cleaned", "", pops)
+
+pop_id <- vapply(pops, returnPopulation, FUN.VALUE = character(1))
+
+table(pop_id)  
+```
+
+Here, we created the function invar_omit() , which removes the columns that are considered invariant from the data frame that we want to analyze. Invariant columns contain data that does not have any variance, and thus, is unnecessary to include in our analysis because it does not provide any useful information. The function we created here removes the invariant columns and then prints an output showing how many columns were removed. After creating the function, we used it on our data frame and created the new data frame, that now contains no invariant columns, snps_no_invar.
+
+```{r}
+invar_omit <- function(x){
+  cat("Dataframe of dim",dim(x), "processed...\n")
+  sds <- apply(x, 2, sd, na.rm = TRUE)
+  i_var0 <- which(sds == 0)
+ 
+  
+  cat(length(i_var0),"columns removed\n")
+  
+  if(length(i_var0) > 0){
+     x <- x[, -i_var0]
+  }
+  
+  ## add return()  with x in it
+  return(x)                      
+}
+
+
+snps_no_invar <- invar_omit(snps_num_t) 
+```
+
+First, we replaced our data frame snps_noNAs with the data frame that doesn’t contain invariant columns that we created in the last step. Then we used a for() loop to complete mean imputation on our data frame to replace all of the remaining NAs in each column with the mean of each column, which we calculated using mean(). In that function, we used the argument na.rm = TRUE to ensure that the mean could be calculated while ignoring the NAs in the column.
+```{r}
+snps_noNAs <- snps_no_invar
+
+N_col <- ncol(snps_no_invar)
+for(i in 1:N_col){
+  
+  # get the current column
+  column_i <- snps_noNAs[, i]
+  
+  # get the mean of the current column
+  mean_i <- mean(column_i, na.rm = TRUE)
+  
+  # get the NAs in the current column
+  NAs_i <- which(is.na(column_i))
+  
+  # record the number of NAs
+  N_NAs <- length(NAs_i)
+
+  # replace the NAs in the current column
+  column_i[NAs_i] <- mean_i
+  
+  # replace the original column with the
+  ## updated columns
+  snps_noNAs[, i] <- column_i
+  
+}
+```
+
+```{r}
+#write.csv(snps_noNAs, file = "SNPs_cleaned.csv",
+#          row.names = F)
+```
+
+```{r}
+#SNPs_cleaned <- read.csv(file = "C:/Users/slind/OneDrive/Desktop/Strickland Lab/honors thesis code/guttata_SNPs_cleaned.csv")
+```
+
+```{r}
+SNPs_cleaned <- invar_omit(snps_noNAs)
+```
+
+Scale data
+We always have to scale data when doing PCA
+
+```{r}
+SNPs_scaled <- scale(SNPs_cleaned)
+```
+
+Perform PCA
+use prcomp to run the PCA test to transform the data into fewer dimensions
+
+```{r}
+pca_scaled <- prcomp(SNPs_scaled)
+```
+
+Create a Screeplot
+create a screeplot to determine how many dimensions to use
+
+```{r}
+screeplot(pca_scaled, 
+          ylab  = "Relative importance",
+          main = "PCA test")
+```
+
+Calculate the Variation
+use summary to determine what PC to use
+
+```{r}
+summary_out_scaled <- summary(pca_scaled)
+```
+
+```{r}
+PCA_variation <- function(pca_summary, PCs = 2){
+  var_explained <- pca_summary$importance[2,1:PCs]*100
+  var_explained <- round(var_explained,1)
+  return(var_explained)
+}
+```
+
+```{r}
+var_out <- PCA_variation(summary_out_scaled,PCs = 10)
+```
+
+```{r}
+N_columns <- ncol(SNPs_scaled)
+barplot(var_out,
+        main = "Percent variation Scree plot",
+        ylab = "Percent variation explained")
+abline(h = 1/N_columns*100, col = 2, lwd = 2)
+```
+
+use biplot() to create a biplot to futher analyze the data
+
+```{r}
+biplot(pca_scaled)
+```
+
+Obtaine PCA scores in order to remove any repetitions in the data
+```{r}
+pca_scores <- vegan::scores(pca_scaled)
+```
+
+```{r}
+row_names <- row.names(snps_num_t) # Key
+
+pops <- gsub("sexpunctata-", "", row_names)
+pops <- gsub("guttata-", "", pops)
+pops <- gsub("-..._cleaned", "", pops)
+pops <- gsub("-.._cleaned", "", pops)
+pops <- gsub("-._cleaned", "", pops)
+
+pop_id <- vapply(pops, returnPopulation, FUN.VALUE = character(1))
+```
+
+Organize the PCA data with categorical labels
+
+```{r}
+pca_scores2 <- data.frame(pop_id,
+                              pca_scores)
+```
+
+```{r}
+ggpubr::ggscatter(data = pca_scores2,
+                  y = "PC2",
+                  x = "PC1",
+                  color = "pop_id",
+                  xlab = "PC1 (15.9% variation)",
+                  ylab = "PC2 (7.3% variation)",
+                  main = "D. guttata Variation") + xlim(-3, 3) + ylim(-3, 3)
+```
