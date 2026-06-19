@@ -1,7 +1,7 @@
 #!/bin/bash -l
 #$ -P ceeglab
 #$ -l h_rt=24:00:00
-#$ -N sexpunctata106_reduced
+#$ -N combined
 #$ -pe omp 8
 #$ -j y
 #$ -o /projectnb/ceeglab/lindens/stacks/logs
@@ -10,18 +10,18 @@
 
 module load stacks
 
-species="sexpunctata"
-run=106
+species="combined"
+run=1
 
 work=/projectnb/ceeglab/lindens
 cd "$work"
 
-output=${work}/stacks/populations/"${species}${run}_reduced"
+output=${work}/stacks/populations/"${species}${run}"
 
-samples=${work}/stacks/denovo/"${species}${run}"
-popmap=${work}/stacks/popmaps/"${species}_reduced_popmap.txt"
+samples=${work}/stacks/denovo/100k/"${species}${run}"
+popmap=${work}/stacks/popmaps/"${species}_popmap.txt"
 
 mkdir -p "$output"
 
-populations -P "$samples" -t 8 --fstats -O "$output" -M "$popmap" -r 0.2 --min_maf 0.05 --radpainter --vcf --genepop --structure
+populations -P "$samples" -t 8 -O "$output" -M "$popmap" -r 0.2 --min_maf 0.05 --vcf --genepop --structure --radpainter --fstats
 
